@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AMultiplayerSessionCharacter
@@ -75,6 +76,37 @@ void AMultiplayerSessionCharacter::SetupPlayerInputComponent(class UInputCompone
 	// handle touch devices
 	PlayerInputComponent->BindTouch(IE_Pressed, this, &AMultiplayerSessionCharacter::TouchStarted);
 	PlayerInputComponent->BindTouch(IE_Released, this, &AMultiplayerSessionCharacter::TouchStopped);
+}
+
+void AMultiplayerSessionCharacter::OpenLobby()
+{
+	UWorld* World = GetWorld();
+
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid world"));
+		return;
+	}
+
+	World->ServerTravel("Game/ThirdPerson/Maps/Lobby");
+}
+
+void AMultiplayerSessionCharacter::CallOpenLevel(const FString& Address)
+{
+	UGameplayStatics::OpenLevel(this, *Address);
+}
+
+void AMultiplayerSessionCharacter::CallClientTravel(const FString& Address)
+{
+	APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+
+	if (!PlayerController)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid player controller"));
+		return;
+	}
+
+	PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
 }
 
 void AMultiplayerSessionCharacter::TouchStarted(ETouchIndex::Type FingerIndex, FVector Location)
