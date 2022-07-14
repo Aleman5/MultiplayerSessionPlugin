@@ -8,11 +8,15 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "OnlineSubsystem.h"
+#include "OnlineSessionSettings.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AMultiplayerSessionCharacter
 
 AMultiplayerSessionCharacter::AMultiplayerSessionCharacter()
+	: CreateSessionCompleteDelegate(
+		FOnCreateSessionCompleteDelegate::CreateUObject(this, &AMultiplayerSessionCharacter::OnCreateSessionComplete))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -50,6 +54,23 @@ AMultiplayerSessionCharacter::AMultiplayerSessionCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+
+	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+
+	if (OnlineSubsystem)
+	{
+		OnlineSessionInterface = OnlineSubsystem->GetSessionInterface();
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Blue,
+				FString::Printf(TEXT("Found Subsystem %s"), *OnlineSubsystem->GetSubsystemName().ToString())
+			);
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -78,35 +99,59 @@ void AMultiplayerSessionCharacter::SetupPlayerInputComponent(class UInputCompone
 	PlayerInputComponent->BindTouch(IE_Released, this, &AMultiplayerSessionCharacter::TouchStopped);
 }
 
-void AMultiplayerSessionCharacter::OpenLobby()
+void AMultiplayerSessionCharacter::CreateGameSession()
 {
-	UWorld* World = GetWorld();
-
-	if (!World)
+	// Called when pressing the 1 key
+	if (!OnlineSessionInterface.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Invalid world"));
 		return;
 	}
 
-	World->ServerTravel("Game/ThirdPerson/Maps/Lobby");
-}
-
-void AMultiplayerSessionCharacter::CallOpenLevel(const FString& Address)
-{
-	UGameplayStatics::OpenLevel(this, *Address);
-}
-
-void AMultiplayerSessionCharacter::CallClientTravel(const FString& Address)
-{
-	APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
-
-	if (!PlayerController)
+	auto ExistingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
+	if (ExistingSession != nullptr)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Invalid player controller"));
-		return;
+		OnlineSessionInterface->DestroySession(NAME_GameSession);
 	}
 
-	PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+	OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
+	SessionSettings->bIsLANMatch = false;
+	SessionSettings->NumPublicConnections = 4; // Max connections in the session
+	SessionSettings->bAllowJoinInProgress = true; // Allows players to join during the session is in progress
+	SessionSettings->bAllowJoinViaPresence = true; // Allows people only in my region to connect
+	SessionSettings->bShouldAdvertise = true; // Allows other people to see my session
+	SessionSettings->bUsesPresence = true; // Allows the person to find sessions in our region
+	SessionSettings->bUseLobbiesIfAvailable = true;
+
+	OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *SessionSettings);
+}
+
+void AMultiplayerSessionCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	if (bWasSuccessful)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Blue,
+				FString::Printf(TEXT("Created session named %s"), *SessionName.ToString()));
+		}
+	}
+	else
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+			-1,
+				15.f,
+				FColor::Red,
+				FString::Printf(TEXT("Failed to create session named %s"), *SessionName.ToString()));
+		}
+	}
 }
 
 void AMultiplayerSessionCharacter::TouchStarted(ETouchIndex::Type FingerIndex, FVector Location)
