@@ -16,7 +16,9 @@
 
 AMultiplayerSessionCharacter::AMultiplayerSessionCharacter()
 	: CreateSessionCompleteDelegate(
-		FOnCreateSessionCompleteDelegate::CreateUObject(this, &AMultiplayerSessionCharacter::OnCreateSessionComplete))
+		FOnCreateSessionCompleteDelegate::CreateUObject(this, &AMultiplayerSessionCharacter::OnCreateSessionComplete)),
+	  FindSessionsCompleteDelegate(
+		FOnFindSessionsCompleteDelegate::CreateUObject(this, &AMultiplayerSessionCharacter::OnFindSessionsComplete))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -128,6 +130,28 @@ void AMultiplayerSessionCharacter::CreateGameSession()
 	OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *SessionSettings);
 }
 
+void AMultiplayerSessionCharacter::JoinGameSession()
+{
+	// Called when pressing the 2 key
+	// Find game sessions
+
+	if (!OnlineSessionInterface.IsValid())
+	{
+		return;
+	}
+
+	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+
+	SessionSearch = MakeShareable(new FOnlineSessionSearch());
+	SessionSearch->MaxSearchResults = 10000;
+	SessionSearch->bIsLanQuery = false;
+	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+	OnlineSessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
+}
+
 void AMultiplayerSessionCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
 	if (bWasSuccessful)
@@ -150,6 +174,24 @@ void AMultiplayerSessionCharacter::OnCreateSessionComplete(FName SessionName, bo
 				15.f,
 				FColor::Red,
 				FString::Printf(TEXT("Failed to create session named %s"), *SessionName.ToString()));
+		}
+	}
+}
+
+void AMultiplayerSessionCharacter::OnFindSessionsComplete(bool bWasSuccessful)
+{
+	for (auto Result : SessionSearch->SearchResults)
+	{
+		FString Id = Result.GetSessionIdStr();
+		FString User = Result.Session.OwningUserName;
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.f,
+				FColor::Cyan,
+				FString::Printf(TEXT("Id: %s User: %s"), *Id, *User));
 		}
 	}
 }
