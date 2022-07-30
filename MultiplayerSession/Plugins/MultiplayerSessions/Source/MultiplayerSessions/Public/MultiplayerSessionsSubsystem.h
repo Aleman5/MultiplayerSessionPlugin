@@ -9,9 +9,17 @@
 #include "MultiplayerSessionsSubsystem.generated.h"
 
 //
-// Declaring our own custom delegates for the Menu class to bind callbacks to
+// Declaring our own custom delegates for the Menu class to bind callbacks to.
+// Using DYNAMIC means that all the parameters must be compatible with Unreal Blueprints.
 //
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete, bool, bWasSuccessful);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete,
+									const TArray<FOnlineSessionSearchResult>& SessionResults,
+									bool bWasSuccessful);
+DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, EOnJoinSessionCompleteResult::Type Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete, bool, bWasSuccessful);
+
 
 /**
  * 
@@ -37,6 +45,10 @@ public:
 	// Our own custom delegates for the Menu class to bind callbacks to
 	//
 	FMultiplayerOnCreateSessionComplete MultiplayerOnCreateSessionComplete;
+	FMultiplayerOnFindSessionsComplete MultiplayerOnFindSessionsComplete;
+	FMultiplayerOnJoinSessionComplete MultiplayerOnJoinSessionComplete;
+	FMultiplayerOnStartSessionComplete MultiplayerOnStartSessionComplete;
+	FMultiplayerOnDestroySessionComplete MultiplayerOnDestroySessionComplete;
 
 protected:
 
@@ -49,7 +61,7 @@ protected:
 private:
 	IOnlineSessionPtr SessionInterface;
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
-	TSharedPtr<FOnlineSessionSearch> SessionSearch;
+	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
 
 	FOnCreateSessionCompleteDelegate CreateSessionCompleteDelegate;
 	FOnFindSessionsCompleteDelegate FindSessionsCompleteDelegate;
