@@ -8,8 +8,9 @@
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
 
-void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch)
+void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch, FString LobbyPath)
 {
+	PathToLobby = FString::Printf(TEXT("%s?listen"), *LobbyPath);
 	NumPublicConnections = NumberOfPublicConnections;
 	MatchType = TypeOfMatch;
 
@@ -82,7 +83,7 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 		UWorld* World = GetWorld();
 		if (World)
 		{
-			World->ServerTravel("/Game/ThirdPerson/Maps/Lobby?listen");
+			World->ServerTravel(PathToLobby);
 		}
 	}
 	else
@@ -95,6 +96,8 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 				FColor::Red,
 				FString::Printf(TEXT("Failed to create session")));
 		}
+
+		SetButtonsEnableState(true);
 	}
 }
 
@@ -114,6 +117,11 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 			MSSubsystem->JoinSession(Result);
 			return;
 		}
+	}
+
+	if (!bWasSuccessful || SessionResults.Num() == 0)
+	{
+		SetButtonsEnableState(true);
 	}
 }
 
@@ -135,6 +143,11 @@ void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 			}
 		}
 	}
+
+	if (Result != EOnJoinSessionCompleteResult::Success)
+	{
+		SetButtonsEnableState(true);
+	}
 }
 
 void UMenu::OnStartSession(bool bWasSuccessful)
@@ -155,18 +168,9 @@ void UMenu::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 
 void UMenu::HostButtonClicked()
 {
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			15.f,
-			FColor::Yellow,
-			FString(TEXT("Host Button Clicked"))
-		);
-	}
-
 	if (MSSubsystem)
 	{
+		SetButtonsEnableState(false);
 		MSSubsystem->CreateSession(NumPublicConnections, MatchType);
 	}
 }
@@ -175,6 +179,7 @@ void UMenu::JoinButtonClicked()
 {
 	if (MSSubsystem)
 	{
+		SetButtonsEnableState(false);
 		MSSubsystem->FindSessions(10000);
 	}
 }
@@ -194,4 +199,11 @@ void UMenu::MenuTearDown()
 			PlayerController->SetShowMouseCursor(false);
 		}
 	}
+}
+
+void UMenu::SetButtonsEnableState(bool bState)
+{
+	HostButton->SetIsEnabled(bState);
+	JoinButton->SetIsEnabled(bState);
+	ExitButton->SetIsEnabled(bState);
 }

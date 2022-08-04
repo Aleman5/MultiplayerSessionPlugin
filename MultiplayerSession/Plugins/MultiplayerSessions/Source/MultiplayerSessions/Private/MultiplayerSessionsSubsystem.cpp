@@ -35,7 +35,11 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 	auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
 	if (ExistingSession)
 	{
-		SessionInterface->DestroySession(NAME_GameSession);
+		bCreateSessionAfterDestroy = true;
+		LastNumPublicConnections = NumPublicConnections;
+		LastMatchType = MatchType;
+		DestroySession();
+		return;
 	}
 
 	CreateSessionCompleteDelegateHandle =
@@ -108,7 +112,19 @@ void UMultiplayerSessionsSubsystem::StartSession()
 
 void UMultiplayerSessionsSubsystem::DestroySession()
 {
+	if (!SessionInterface.IsValid())
+	{
+		MultiplayerOnDestroySessionComplete.Broadcast(false);
+		return;
+	}
 
+	DestroySessionCompleteDelegateHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegate);
+
+	if (!SessionInterface->DestroySession(NAME_GameSession))
+	{
+		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+		MultiplayerOnDestroySessionComplete.Broadcast(false);
+	}
 }
 
 void UMultiplayerSessionsSubsystem::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
@@ -148,66 +164,21 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 
 void UMultiplayerSessionsSubsystem::OnStartSessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	if (bWasSuccessful)
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Blue,
-				FString::Printf(TEXT("Created session named %s"), *SessionName.ToString()));
-		}
 
-		UWorld* World = GetWorld();
-
-		if (World)
-		{
-			World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
-		}
-	}
-	else
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				FString::Printf(TEXT("Failed to create session named %s"), *SessionName.ToString()));
-		}
-	}
 }
 
 void UMultiplayerSessionsSubsystem::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	if (bWasSuccessful)
+	if (SessionInterface)
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Blue,
-				FString::Printf(TEXT("Created session named %s"), *SessionName.ToString()));
-		}
-
-		UWorld* World = GetWorld();
-
-		if (World)
-		{
-			World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
-		}
+		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
 	}
-	else
+
+	if (bWasSuccessful && bCreateSessionAfterDestroy)
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				FString::Printf(TEXT("Failed to create session named %s"), *SessionName.ToString()));
-		}
+		bCreateSessionAfterDestroy = false;
+		CreateSession(LastNumPublicConnections, LastMatchType);
 	}
+
+	MultiplayerOnDestroySessionComplete.Broadcast(bWasSuccessful);
 }
